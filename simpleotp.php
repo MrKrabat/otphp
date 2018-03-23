@@ -11,6 +11,7 @@ class SimpleOTP {
     private static $BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     private $secret;
+    private $isTOTP;
     private $tokenTime;
     private $tokenLength;
     private $tokenCounter;
@@ -18,6 +19,7 @@ class SimpleOTP {
 
     /**
      * Creates SimpleOTP instance
+     * @param $isTOTP - true for TOTP, false for HOTP
      * @param $secret - secret in base32 or binary format
      * @param $isSecretBase32 - true if secret is in base32 format
      * @param $tokenTime - how long in seconds a token is valid
@@ -25,7 +27,8 @@ class SimpleOTP {
      * @param $tokenCounter - token counter (only for HOTP)
      * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
      **/
-    function __construct(string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, int $tokenCounter = 0, string $tokenAlgo = "sha1") {
+    function __construct(bool $isTOTP, string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, int $tokenCounter = 0, string $tokenAlgo = "sha1") {
+        $this->isTOTP = $isTOTP;
         $this->tokenTime = $tokenTime;
         $this->tokenLength = $tokenLength;
         $this->tokenCounter = $tokenCounter;
@@ -41,16 +44,20 @@ class SimpleOTP {
 
     /**
      * Generates OTP token
-     * @param $otpMode - true for TOTP, false for HOTP
      * @param $tokenInfo - timestamp or counter value to use
+     * @param $isTimecodeNormalized - true if $tokenInfo is from getTimecode() (only for TOTP)
      * @return string
      **/
-    public function getToken(bool $otpMode = true, int $tokenInfo = Null): string {
-        if ($tokenInfo !== Null && !$otpMode) {
+    public function getToken(int $tokenInfo = Null, bool $isTimecodeNormalized = true): string {
+        if ($tokenInfo !== Null && !$this->getOTPMode()) {
             $hmac_counter = pack("N*", 0) . pack("N*", $tokenInfo);
-        } elseif ($tokenInfo !== Null && $otpMode) {
-            $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode($tokenInfo));
-        } elseif ($otpMode) {
+        } elseif ($tokenInfo !== Null && $this->getOTPMode()) {
+            if ($isTimecodeNormalized) {
+                $hmac_counter = pack("N*", 0) . pack("N*", $tokenInfo);
+            } else {
+                $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode($tokenInfo));
+            }
+        } elseif ($this->getOTPMode()) {
             $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode());
         } else {
             $hmac_counter = pack("N*", 0) . pack("N*", $this->getTokenCounter());
@@ -62,19 +69,34 @@ class SimpleOTP {
     }
 
     /**
-     * Verifys a user inputted key against the current timestamp. Checks $window
-     * keys either side of the timestamp.
-     *
-     * @param string $b32seed
-     * @param string $key - User specified key
-     * @param integer $window
-     * @param boolean $useTimeStamp
+     * Verify token from user
+     * @param $token - Unsafe user token to compare
+     * @param $tokenWindow - How many tokens before/after current counter/time should be compared
+     * @param $tokenInfo - timestamp or counter value to use
+     * @param $isTimecodeNormalized - true if $tokenInfo is from getTimecode() (only for TOTP)
      * @return boolean
      **/
-    public function verify(string $token, int $tokenTime = Null, int $tokenWindow = 0): bool {
-        if ($tokenTime === Null) {
-            $tokenTime = $this->getTimecode();
+    public function verify(string $token, int $tokenWindow = 0, int $tokenInfo = Null, bool $isTimecodeNormalized = true): bool {
+        if ($tokenInfo !== Null && !$this->getOTPMode()) {
+            // do nothing
+        } elseif ($tokenInfo !== Null && $this->getOTPMode()) {
+            if (!$isTimecodeNormalized) {
+                $tokenInfo = $this->getTimecode($tokenInfo);
+            }
+        } elseif ($this->getOTPMode()) {
+            $tokenInfo = $this->getTimecode();
+        } else {
+            $tokenInfo = $this->getTokenCounter();
+            $this->tokenCounter++;
         }
+
+        for ($i = $tokenInfo - $tokenWindow; $i <= $tokenInfo + $tokenWindow; $i++) {
+            if ($this->getToken($i, true) === $token) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -94,7 +116,7 @@ class SimpleOTP {
 
     /**
      * Returns the current Unix Timestamp devided by tokenTime
-     * @param $timecode - Unix Timestamp
+     * @param $timecode - Unix Timestamp with microseconds
      * @return integer
      **/
     public function getTimecode(int $timecode = Null): int {
@@ -102,6 +124,14 @@ class SimpleOTP {
             $timecode = microtime(true);
         }
         return floor($timecode/$this->getTokenTime());
+    }
+
+    /**
+     * Returns OTP mode, true of TOTP, false for HOTP
+     * @return bool
+     **/
+    public function getOTPMode(): bool {
+        return $this->isTOTP;
     }
 
     /**
