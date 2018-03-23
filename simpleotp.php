@@ -7,31 +7,30 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+interface iSimpleOTP {
+    public function getToken(int $tokenInfo = Null): string;
+    public function verify(string $token, int $tokenWindow = 0, int $tokenInfo = Null): bool;
+}
+
 class SimpleOTP {
     private static $BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-    private $secret;
-    private $isTOTP;
+    protected $secret;
     private $tokenTime;
     private $tokenLength;
-    private $tokenCounter;
     private $tokenAlgo;
 
     /**
      * Creates SimpleOTP instance
-     * @param $isTOTP - true for TOTP, false for HOTP
      * @param $secret - secret in base32 or binary format
      * @param $isSecretBase32 - true if secret is in base32 format
      * @param $tokenTime - how long in seconds a token is valid
      * @param $tokenLength - length of token
-     * @param $tokenCounter - token counter (only for HOTP)
      * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
      **/
-    function __construct(bool $isTOTP, string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, int $tokenCounter = 0, string $tokenAlgo = "sha1") {
-        $this->isTOTP = $isTOTP;
+    function __construct(string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, string $tokenAlgo = "sha1") {
         $this->tokenTime = $tokenTime;
         $this->tokenLength = $tokenLength;
-        $this->tokenCounter = $tokenCounter;
         $this->tokenAlgo = $tokenAlgo;
 
         if ($isSecretBase32) {
@@ -43,68 +42,11 @@ class SimpleOTP {
     }
 
     /**
-     * Generates OTP token
-     * @param $tokenInfo - timestamp or counter value to use
-     * @param $isTimecodeNormalized - true if $tokenInfo is from getTimecode() (only for TOTP)
-     * @return string
-     **/
-    public function getToken(int $tokenInfo = Null, bool $isTimecodeNormalized = true): string {
-        if ($tokenInfo !== Null && !$this->getOTPMode()) {
-            $hmac_counter = pack("N*", 0) . pack("N*", $tokenInfo);
-        } elseif ($tokenInfo !== Null && $this->getOTPMode()) {
-            if ($isTimecodeNormalized) {
-                $hmac_counter = pack("N*", 0) . pack("N*", $tokenInfo);
-            } else {
-                $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode($tokenInfo));
-            }
-        } elseif ($this->getOTPMode()) {
-            $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode());
-        } else {
-            $hmac_counter = pack("N*", 0) . pack("N*", $this->getTokenCounter());
-            $this->tokenCounter++;
-        }
-
-        $hash = hash_hmac($this->getTokenAlgorithm(), $hmac_counter, $this->secret, true);
-        return str_pad($this->generateOTP($hash), $this->getTokenLength(), "0", STR_PAD_LEFT);
-    }
-
-    /**
-     * Verify token from user
-     * @param $token - Unsafe user token to compare
-     * @param $tokenWindow - How many tokens before/after current counter/time should be compared
-     * @param $tokenInfo - timestamp or counter value to use
-     * @param $isTimecodeNormalized - true if $tokenInfo is from getTimecode() (only for TOTP)
-     * @return boolean
-     **/
-    public function verify(string $token, int $tokenWindow = 0, int $tokenInfo = Null, bool $isTimecodeNormalized = true): bool {
-        if ($tokenInfo !== Null && !$this->getOTPMode()) {
-            // do nothing
-        } elseif ($tokenInfo !== Null && $this->getOTPMode()) {
-            if (!$isTimecodeNormalized) {
-                $tokenInfo = $this->getTimecode($tokenInfo);
-            }
-        } elseif ($this->getOTPMode()) {
-            $tokenInfo = $this->getTimecode();
-        } else {
-            $tokenInfo = $this->getTokenCounter();
-            $this->tokenCounter++;
-        }
-
-        for ($i = $tokenInfo - $tokenWindow; $i <= $tokenInfo + $tokenWindow; $i++) {
-            if ($this->getToken($i, true) === $token) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * generateOTP
      * @param $hash
      * @return integer
      **/
-    private function generateOTP(string $hash): int {
+    protected function generateOTP(string $hash): int {
         $offset = ord($hash[strlen($hash)-1]) & 0xf;
 
         return (((ord($hash[$offset]) & 0x7f) << 24 ) |
@@ -112,42 +54,6 @@ class SimpleOTP {
             ((ord($hash[$offset+2]) & 0xff) << 8 ) |
             (ord($hash[$offset+3]) & 0xff)
         ) % pow(10, $this->getTokenLength());
-    }
-
-    /**
-     * Returns the current Unix Timestamp devided by tokenTime
-     * @param $timecode - Unix Timestamp with microseconds
-     * @return integer
-     **/
-    public function getTimecode(int $timecode = Null): int {
-        if ($timecode === Null) {
-            $timecode = microtime(true);
-        }
-        return floor($timecode/$this->getTokenTime());
-    }
-
-    /**
-     * Returns OTP mode, true of TOTP, false for HOTP
-     * @return bool
-     **/
-    public function getOTPMode(): bool {
-        return $this->isTOTP;
-    }
-
-    /**
-     * Returns token counter
-     * @return integer
-     **/
-    public function getTokenCounter(): int {
-        return $this->tokenCounter;
-    }
-
-    /**
-     * Sets token counter
-     * @param $tokenCounter - token counter (only for HOTP)
-     **/
-    public function setTokenCounter(int $tokenCounter) {
-        $this->tokenCounter = $tokenCounter;
     }
 
     /**
@@ -240,6 +146,151 @@ class SimpleOTP {
         array_unshift($args, "C*");
 
         return rtrim(call_user_func_array("pack", $args), "\0");
+    }
+}
+
+class SimpleTOTP extends SimpleOTP implements iSimpleOTP {
+    /**
+     * Creates SimpleTOTP instance
+     * @param $secret - secret in base32 or binary format
+     * @param $isSecretBase32 - true if secret is in base32 format
+     * @param $tokenTime - how long in seconds a token is valid
+     * @param $tokenLength - length of token
+     * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
+     **/
+    function __construct(string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, string $tokenAlgo = "sha1") {
+        parent::__construct($secret, $isSecretBase32, $tokenTime, $tokenLength, $tokenAlgo);
+    }
+
+    /**
+     * Generates TOTP token
+     * @param $timecode - timestamp to use
+     * @param $isTimecodeNormalized - true if $timecode is from getTimecode()
+     * @return string
+     **/
+    public function getToken(int $timecode = Null, bool $isTimecodeNormalized = true): string {
+        if ($timecode !== Null) {
+            if ($isTimecodeNormalized) {
+                $hmac_counter = pack("N*", 0) . pack("N*", $timecode);
+            } else {
+                $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode($timecode));
+            }
+        } else {
+            $hmac_counter = pack("N*", 0) . pack("N*", $this->getTimecode());
+        }
+
+        $hash = hash_hmac($this->getTokenAlgorithm(), $hmac_counter, $this->secret, true);
+        return str_pad($this->generateOTP($hash), $this->getTokenLength(), "0", STR_PAD_LEFT);
+    }
+
+    /**
+     * Verify token from user
+     * @param $token - Unsafe user token to compare
+     * @param $tokenWindow - How many tokens before/after current counter/time should be compared
+     * @param $timecode - timestamp to use
+     * @param $isTimecodeNormalized - true if $timecode is from getTimecode()
+     * @return boolean
+     **/
+    public function verify(string $token, int $tokenWindow = 0, int $timecode = Null, bool $isTimecodeNormalized = true): bool {
+        if ($timecode !== Null) {
+            if (!$isTimecodeNormalized) {
+                $timecode = $this->getTimecode($timecode);
+            }
+        } else {
+            $timecode = $this->getTimecode();
+        }
+
+        for ($i = $timecode - $tokenWindow; $i <= $timecode + $tokenWindow; $i++) {
+            if ($this->getToken($i, true) === $token) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns the current Unix Timestamp devided by tokenTime
+     * @param $timecode - Unix Timestamp with microseconds
+     * @return integer
+     **/
+    public function getTimecode(int $timecode = Null): int {
+        if ($timecode === Null) {
+            $timecode = microtime(true);
+        }
+        return floor($timecode/$this->getTokenTime());
+    }
+}
+
+class SimpleHOTP extends SimpleOTP implements iSimpleOTP {
+    private $tokenCounter;
+
+    /**
+     * Creates SimpleHOTP instance
+     * @param $secret - secret in base32 or binary format
+     * @param $isSecretBase32 - true if secret is in base32 format
+     * @param $tokenCounter - token counter
+     * @param $tokenTime - how long in seconds a token is valid
+     * @param $tokenLength - length of token
+     * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
+     **/
+    function __construct(string $secret, bool $isSecretBase32 = true, int $tokenCounter = 0, int $tokenTime = 30, int $tokenLength = 6, string $tokenAlgo = "sha1") {
+        parent::__construct($secret, $isSecretBase32, $tokenTime, $tokenLength, $tokenAlgo);
+        $this->tokenCounter = $tokenCounter;
+    }
+
+    /**
+     * Generates HOTP token
+     * @param $tokenCounter - counter to use
+     * @return string
+     **/
+    public function getToken(int $tokenCounter = Null): string {
+        if ($tokenCounter !== Null) {
+            $hmac_counter = pack("N*", 0) . pack("N*", $tokenCounter);
+        } else {
+            $hmac_counter = pack("N*", 0) . pack("N*", $this->getTokenCounter());
+            $this->tokenCounter++;
+        }
+
+        $hash = hash_hmac($this->getTokenAlgorithm(), $hmac_counter, $this->secret, true);
+        return str_pad($this->generateOTP($hash), $this->getTokenLength(), "0", STR_PAD_LEFT);
+    }
+
+    /**
+     * Verify token from user
+     * @param $token - Unsafe user token to compare
+     * @param $tokenWindow - How many tokens before/after current counter should be compared
+     * @param $tokenCounter - counter value to use
+     * @return boolean
+     **/
+    public function verify(string $token, int $tokenWindow = 0, int $tokenCounter = Null): bool {
+        if ($tokenCounter === Null) {
+            $tokenCounter = $this->getTokenCounter();
+            $this->tokenCounter++;
+        }
+
+        for ($i = $tokenCounter - $tokenWindow; $i <= $tokenCounter + $tokenWindow; $i++) {
+            if ($this->getToken($i, true) === $token) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns token counter
+     * @return integer
+     **/
+    public function getTokenCounter(): int {
+        return $this->tokenCounter;
+    }
+
+    /**
+     * Sets token counter
+     * @param $tokenCounter - token counter
+     **/
+    public function setTokenCounter(int $tokenCounter) {
+        $this->tokenCounter = $tokenCounter;
     }
 }
 ?>

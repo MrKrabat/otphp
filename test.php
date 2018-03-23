@@ -21,7 +21,7 @@
     require_once("simpleotp.php");
 
     /* test GoogleAuth HOTP */
-    $otp = new SimpleOTP(false, "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
+    $otp = new SimpleHOTP("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
     assert($otp->getToken(0) === "755224");
     assert($otp->getToken() === "755224");
     assert($otp->getToken(1) === "287082");
@@ -46,7 +46,7 @@
     assert($otp->verify("969429", 1, 2) === true);
 
     /* test GoogleAuth TOTP */
-    $otp = new SimpleOTP(true, "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
+    $otp = new SimpleTOTP("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
     assert($otp->getToken(1111111111, false) === "050471");
     assert($otp->getToken(1234567890, false) === "005924");
     assert($otp->getToken(2000000000, false) === "279037");
@@ -58,13 +58,13 @@
     assert($otp->verify("279037", 1, 2000000030, false) === true);
 
     /* test sha256 and 8 digit tan */
-    $otp = new SimpleOTP(true, "12345678901234567890123456789012", false, 30, 8, 0, "sha256");
+    $otp = new SimpleTOTP("12345678901234567890123456789012", false, 30, 8, "sha256");
     assert($otp->getToken(1111111109, false) === "68084774");
     assert($otp->getToken(1111111111, false) === "67062674");
     assert($otp->getToken(1234567890, false) === "91819424");
 
     /* test sha512 and 8 digit tan */
-    $otp = new SimpleOTP(true, "1234567890123456789012345678901234567890123456789012345678901234", false, 30, 8, 0, "sha512");
+    $otp = new SimpleTOTP("1234567890123456789012345678901234567890123456789012345678901234", false, 30, 8, "sha512");
     assert($otp->getToken(59, false) === "90693936");
     assert($otp->getToken(1234567890, false) === "93441116");
 
