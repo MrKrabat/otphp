@@ -11,9 +11,7 @@
     assert_options(ASSERT_WARNING, 0);
     assert_options(ASSERT_QUIET_EVAL, 1);
 
-    /**
-     * assert handler
-     */
+    /* assert handler */
     function assertHandler($file, $line, $code) {
         echo "<b>Test failed</b>: Line '$line'<br>";
     }

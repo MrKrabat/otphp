@@ -207,6 +207,10 @@ class SimpleOTP {
     public static function generateSecretKey(int $secretLength = 16, bool $secretBase32 = true): string {
         $ret = "";
 
+        if ($secretLength % 8 !== 0) {
+            throw new Exception("secretLength has to be a multiple of 8");
+        }
+
         for ($i = 0; $i < $secretLength; $i++) {
             $ret .= substr(self::$BASE32, random_int(0,31), 1);
         }
