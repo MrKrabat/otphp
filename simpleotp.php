@@ -25,7 +25,7 @@ class SimpleOTP {
      * @param $tokenCounter - token counter (only for HOTP)
      * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
      **/
-    function __construct($secret, $isSecretBase32 = true, $tokenTime = 30, $tokenLength = 6, $tokenCounter = 0, $tokenAlgo = "sha1") {
+    function __construct(string $secret, bool $isSecretBase32 = true, int $tokenTime = 30, int $tokenLength = 6, int $tokenCounter = 0, string $tokenAlgo = "sha1") {
         $this->tokenTime = $tokenTime;
         $this->tokenLength = $tokenLength;
         $this->tokenCounter = $tokenCounter;
@@ -45,7 +45,7 @@ class SimpleOTP {
      * @param $tokenInfo - timestamp or counter value to use
      * @return string
      **/
-    public function getToken($otpMode = true, $tokenInfo = Null) {
+    public function getToken(bool $otpMode = true, int $tokenInfo = Null): string {
         if ($tokenInfo !== Null && !$otpMode) {
             $hmac_counter = pack("N*", 0) . pack("N*", $tokenInfo);
         } elseif ($tokenInfo !== Null && $otpMode) {
@@ -71,7 +71,7 @@ class SimpleOTP {
      * @param boolean $useTimeStamp
      * @return boolean
      **/
-    public function verify($token, $tokenTime = Null, $tokenWindow = 0) {
+    public function verify(string $token, int $tokenTime = Null, int $tokenWindow = 0): bool {
         if ($tokenTime === Null) {
             $tokenTime = $this->getTimecode();
         }
@@ -82,7 +82,7 @@ class SimpleOTP {
      * @param $hash
      * @return integer
      **/
-    private function generateOTP($hash) {
+    private function generateOTP(string $hash): int {
         $offset = ord($hash[strlen($hash)-1]) & 0xf;
 
         return (((ord($hash[$offset]) & 0x7f) << 24 ) |
@@ -97,7 +97,7 @@ class SimpleOTP {
      * @param $timecode - Unix Timestamp
      * @return integer
      **/
-    public function getTimecode($timecode = Null) {
+    public function getTimecode(int $timecode = Null): int {
         if ($timecode === Null) {
             $timecode = microtime(true);
         }
@@ -108,7 +108,7 @@ class SimpleOTP {
      * Returns token counter
      * @return integer
      **/
-    public function getTokenCounter() {
+    public function getTokenCounter(): int {
         return $this->tokenCounter;
     }
 
@@ -116,7 +116,7 @@ class SimpleOTP {
      * Sets token counter
      * @param $tokenCounter - token counter (only for HOTP)
      **/
-    public function setTokenCounter($tokenCounter) {
+    public function setTokenCounter(int $tokenCounter) {
         $this->tokenCounter = $tokenCounter;
     }
 
@@ -124,7 +124,7 @@ class SimpleOTP {
      * Returns token length
      * @return integer
      **/
-    public function getTokenLength() {
+    public function getTokenLength(): int {
         return $this->tokenLength;
     }
 
@@ -132,7 +132,7 @@ class SimpleOTP {
      * Sets token length
      * @param $tokenLength - length of token
      **/
-    public function setTokenLength($tokenLength) {
+    public function setTokenLength(int $tokenLength) {
         $this->tokenLength = $tokenLength;
     }
 
@@ -140,7 +140,7 @@ class SimpleOTP {
      * Returns token time
      * @return integer
      **/
-    public function getTokenTime() {
+    public function getTokenTime(): int {
         return $this->tokenTime;
     }
 
@@ -148,7 +148,7 @@ class SimpleOTP {
      * Sets token time
      * @param $tokenTime - how long in seconds a token is valid
      **/
-    public function setTokenTime($tokenTime) {
+    public function setTokenTime(int $tokenTime) {
         $this->tokenTime = $tokenTime;
     }
 
@@ -156,7 +156,7 @@ class SimpleOTP {
      * Returns token algorithm
      * @return string
      **/
-    public function getTokenAlgorithm() {
+    public function getTokenAlgorithm(): string {
         return $this->tokenAlgo;
     }
 
@@ -164,7 +164,7 @@ class SimpleOTP {
      * Sets token algorithm
      * @param $tokenAlgo - Hash algorithm to use, see https://secure.php.net/manual/en/function.hash-hmac-algos.php
      **/
-    public function setTokenAlgorithm($tokenAlgo) {
+    public function setTokenAlgorithm(string $tokenAlgo) {
         $this->tokenAlgo = $tokenAlgo;
     }
 
@@ -174,7 +174,7 @@ class SimpleOTP {
      * @param $secretBase32 - true to return base32, false for binary
      * @return string
      **/
-    public static function generateSecretKey($secretLength = 16, $secretBase32 = true) {
+    public static function generateSecretKey(int $secretLength = 16, bool $secretBase32 = true): string {
         $ret = "";
 
         for ($i = 0; $i < $secretLength; $i++) {
@@ -193,7 +193,7 @@ class SimpleOTP {
      * @param $input - base32 string
      * @return string
      **/
-    public static function base32_decode($input) {
+    public static function base32_decode(string $input): string {
         $ret = "";
 
         foreach (str_split(strtoupper($input)) as $b32char) {
